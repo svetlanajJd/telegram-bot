@@ -8,7 +8,6 @@ import pro.sky.telegrambot.repository.NotificationTaskRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 
-
 @Service
 public class NotificationTaskService {
     private final NotificationTaskRepository notificationTaskRepository;

@@ -5,6 +5,7 @@ import com.pengrad.telegrambot.UpdatesListener;
 import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.request.SendMessage;
+import liquibase.pro.packaged.id;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +24,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class TelegramBotUpdatesListener implements UpdatesListener {
+
     public TelegramBotUpdatesListener(NotificationTaskRepository notificationTaskRepository, NotificationTaskService notificationTaskService, TelegramBot telegramBot) {
         this.notificationTaskRepository = notificationTaskRepository;
         this.notificationTaskService = notificationTaskService;
@@ -30,12 +32,15 @@ public class TelegramBotUpdatesListener implements UpdatesListener {
     }
 
     private final NotificationTaskRepository notificationTaskRepository;
-    private Pattern patternMessage;
+    private final Pattern patternMessage = Pattern.compile("([0-9\\.\\:\\s]{16})(\\s)([\\W+]+)");
+
     private final NotificationTaskService notificationTaskService;
 
     private final Logger logger = LoggerFactory.getLogger(TelegramBotUpdatesListener.class);
 
     private final TelegramBot telegramBot;
+    private Integer id;
+
 
 
     @PostConstruct
@@ -49,9 +54,9 @@ public class TelegramBotUpdatesListener implements UpdatesListener {
             logger.info("Processing update: {}", update);
             Message msg = update.message();
             Long chatId = msg.chat().id();
-            patternMessage = Pattern.compile("([0-9\\.\\:\\s]{16})(\\s)([\\W+]+)");
-            Matcher matcherMessage = patternMessage.matcher(msg.toString());
-            if (update.message().text().equals("/start")) {
+
+            Matcher matcherMessage = patternMessage.matcher(msg.text());
+            if (msg.text().equals("/start")) {
                 String messageText = "Hello";
                 SendMessage message = new SendMessage(chatId, messageText);
                 telegramBot.execute(message);
@@ -61,27 +66,19 @@ public class TelegramBotUpdatesListener implements UpdatesListener {
                 String item = matcherMessage.group(3);
                 NotificationTask notificationTask = new NotificationTask(chatId, dateTime, item);
                 notificationTaskRepository.save(notificationTask);
+
             }
         });
+        run();
         return UpdatesListener.CONFIRMED_UPDATES_ALL;
     }
 
     @Scheduled(cron = "0 0/1 * * * *")
     public void run() {
-
-        String messageFind = notificationTaskService.resultFound(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)).
-                toString();
-
-        telegramBot.setUpdatesListener(updates -> {
-            updates.forEach(update ->
-            {
-                Message msg = update.message();
-                Long chatId = msg.chat().id();
-                SendMessage message = new SendMessage(chatId, messageFind);
-                telegramBot.execute(message);
-            });
-            return UpdatesListener.CONFIRMED_UPDATES_ALL;
-        });
-
+        List<NotificationTask> messageFind = notificationTaskService.resultFound(LocalDateTime.now());
+        for (NotificationTask notificationTask : messageFind) {
+            SendMessage message = new SendMessage(notificationTask.getChatId(), notificationTask.getMessage());
+            telegramBot.execute(message);
+        }
     }
 }
